@@ -1,7 +1,7 @@
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
 import uuid from 'react-native-uuid';
-import { Recording } from '@types/index';
+import { Recording } from '../types/index';
 
 // 录音配置
 const RECORDING_OPTIONS: Audio.RecordingOptions = {

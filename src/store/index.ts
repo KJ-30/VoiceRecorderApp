@@ -1,13 +1,13 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { 
-  Recording, 
-  Folder, 
-  User, 
+import {
+  Recording,
+  Folder,
+  User,
   RecordingStatus,
-  AppState 
-} from '@types/index';
+  AppState
+} from '../types/index';
 
 interface AppStore extends AppState {
   // Actions
@@ -158,6 +158,7 @@ interface RecordingStore extends RecordingState {
   resumeRecording: () => void;
   stopRecording: () => void;
   setUri: (uri: string) => void;
+  setRecordingDuration: (duration: number) => void;
   reset: () => void;
 }
 
@@ -200,6 +201,8 @@ export const useRecordingStore = create<RecordingStore>()((set, get) => ({
     }),
 
   setUri: (uri) => set({ uri }),
+
+  setRecordingDuration: (duration) => set({ duration }),
 
   reset: () =>
     set({

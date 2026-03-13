@@ -1,31 +1,44 @@
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  SafeAreaView,
-  StatusBar,
-  ScrollView,
-  Switch,
-  Modal,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, StatusBar, ScrollView, Switch, Modal, Alert } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useAppStore } from '@store/index';
 import { theme, utils } from '@utils/theme';
 import { aiService } from '@services/ai';
 import { ollamaService } from '@services/ollama';
 import { AIBackend } from '@services/ai-adapter';
+import { audioPlayerService } from '@services/audio-player';
 
 export const SettingsScreen: React.FC = () => {
   const { user } = useAppStore();
   const [aiBackend, setAiBackend] = useState<AIBackend>('auto');
   const [ollamaStatus, setOllamaStatus] = useState(false);
   const [showBackendModal, setShowBackendModal] = useState(false);
+  const [breakpointCount, setBreakpointCount] = useState(0);
 
   useEffect(() => {
     checkAIBackendStatus();
+    loadBreakpointCount();
   }, []);
+
+  const loadBreakpointCount = async () => {
+    const breakpoints = await audioPlayerService.getAllBreakpoints();
+    setBreakpointCount(breakpoints.length);
+  };
+
+  const handleClearAllBreakpoints = async () => {
+    Alert.alert('清除所有断点', `确定要清除 ${breakpointCount} 个播放断点吗？`, [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '清除',
+        style: 'destructive',
+        onPress: async () => {
+          await audioPlayerService.clearAllBreakpoints();
+          setBreakpointCount(0);
+          Alert.alert('成功', '所有断点已清除');
+        },
+      },
+    ]);
+  };
 
   const checkAIBackendStatus = async () => {
     const status = await ollamaService.checkAvailability();
@@ -60,15 +73,13 @@ export const SettingsScreen: React.FC = () => {
   const renderProfileCard = () => (
     <TouchableOpacity style={styles.profileCard}>
       <View style={styles.profileAvatar}>
-        <Text style={styles.profileAvatarText}>
-          {(user?.name || '用').charAt(0)}
-        </Text>
+        <Text style={styles.profileAvatarText}>{(user?.name || '用').charAt(0)}</Text>
       </View>
       <View style={styles.profileInfo}>
         <Text style={styles.profileName}>{user?.name || '用户'}</Text>
         <Text style={styles.profileEmail}>{user?.email || 'user@example.com'}</Text>
       </View>
-      <Icon name="chevron-forward" size={20} color={theme.colors.textSecondary} />
+      <Icon name='chevron-forward' size={20} color={theme.colors.textSecondary} />
     </TouchableOpacity>
   );
 
@@ -78,7 +89,7 @@ export const SettingsScreen: React.FC = () => {
       <View style={styles.storageCard}>
         <View style={styles.storageHeader}>
           <View style={styles.storageIcon}>
-            <Icon name="cloud" size={24} color={theme.colors.primary} />
+            <Icon name='cloud' size={24} color={theme.colors.primary} />
           </View>
           <View style={styles.storageInfo}>
             <Text style={styles.storageTitle}>云存储</Text>
@@ -91,16 +102,13 @@ export const SettingsScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
         <View style={styles.storageBar}>
-          <View 
+          <View
             style={[
-              styles.storageBarFill, 
-              { 
-                width: `${Math.min(
-                  ((user?.storageUsed || 0) / (user?.storageLimit || 1)) * 100, 
-                  100
-                )}%` 
-              }
-            ]} 
+              styles.storageBarFill,
+              {
+                width: `${Math.min(((user?.storageUsed || 0) / (user?.storageLimit || 1)) * 100, 100)}%`,
+              },
+            ]}
           />
         </View>
       </View>
@@ -111,21 +119,27 @@ export const SettingsScreen: React.FC = () => {
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>录音设置</Text>
       <View style={styles.settingsCard}>
-        <SettingItem
-          icon="mic"
-          iconColor={theme.colors.primary}
-          title="录音质量"
-          subtitle="高质量 (48kHz)"
-          showArrow
-        />
-        <SettingItem
-          icon="language"
-          iconColor={theme.colors.success}
-          title="默认语言"
-          subtitle="中文 (简体)"
-          showArrow
-          isLast
-        />
+        <SettingItem icon='mic' iconColor={theme.colors.primary} title='录音质量' subtitle='高质量 (48kHz)' showArrow />
+        <SettingItem icon='language' iconColor={theme.colors.success} title='默认语言' subtitle='中文 (简体)' showArrow isLast />
+      </View>
+    </View>
+  );
+
+  const renderPlaybackSettingsSection = () => (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>播放设置</Text>
+      <View style={styles.settingsCard}>
+        <TouchableOpacity style={styles.settingItem} onPress={handleClearAllBreakpoints}>
+          <View style={[styles.settingIcon, { backgroundColor: `${theme.colors.primary}20` }]}>
+            <Icon name='time-outline' size={20} color={theme.colors.primary} />
+          </View>
+          <View style={styles.settingContent}>
+            <Text style={styles.settingTitle}>清除所有断点</Text>
+            <Text style={styles.settingSubtitle}>当前有 {breakpointCount} 个播放断点</Text>
+          </View>
+          <Icon name='trash-outline' size={20} color={theme.colors.danger} />
+        </TouchableOpacity>
+        <SettingItem icon='speedometer' iconColor={theme.colors.warning} title='默认播放速度' subtitle='1.0x' showArrow isLast />
       </View>
     </View>
   );
@@ -136,7 +150,7 @@ export const SettingsScreen: React.FC = () => {
       <View style={styles.settingsCard}>
         <TouchableOpacity style={styles.settingItem} onPress={() => setShowBackendModal(true)}>
           <View style={[styles.settingIcon, { backgroundColor: `${theme.colors.purple}20` }]}>
-            <Icon name="hardware-chip" size={20} color={theme.colors.purple} />
+            <Icon name='hardware-chip' size={20} color={theme.colors.purple} />
           </View>
           <View style={styles.settingContent}>
             <Text style={styles.settingTitle}>AI 后端</Text>
@@ -150,101 +164,57 @@ export const SettingsScreen: React.FC = () => {
               )}
             </View>
           </View>
-          <Icon name="chevron-forward" size={20} color={theme.colors.textSecondary} />
+          <Icon name='chevron-forward' size={20} color={theme.colors.textSecondary} />
         </TouchableOpacity>
-        <SettingItem
-          icon="sparkles"
-          iconColor={theme.colors.purple}
-          title="AI 总结"
-          subtitle="自动生成会议总结"
-          showSwitch
-          switchValue={true}
-        />
-        <SettingItem
-          icon="checkbox"
-          iconColor={theme.colors.warning}
-          title="待办事项"
-          subtitle="自动提取行动项"
-          showSwitch
-          switchValue={true}
-        />
-        <SettingItem
-          icon="people"
-          iconColor={theme.colors.teal}
-          title="发言人识别"
-          subtitle="自动识别不同发言人"
-          showSwitch
-          switchValue={true}
-          isLast
-        />
+        <SettingItem icon='sparkles' iconColor={theme.colors.purple} title='AI 总结' subtitle='自动生成会议总结' showSwitch switchValue={true} />
+        <SettingItem icon='checkbox' iconColor={theme.colors.warning} title='待办事项' subtitle='自动提取行动项' showSwitch switchValue={true} />
+        <SettingItem icon='people' iconColor={theme.colors.teal} title='发言人识别' subtitle='自动识别不同发言人' showSwitch switchValue={true} isLast />
       </View>
     </View>
   );
 
   const renderBackendModal = () => (
-    <Modal
-      visible={showBackendModal}
-      transparent
-      animationType="slide"
-      onRequestClose={() => setShowBackendModal(false)}
-    >
+    <Modal visible={showBackendModal} transparent animationType='slide' onRequestClose={() => setShowBackendModal(false)}>
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>选择 AI 后端</Text>
             <TouchableOpacity onPress={() => setShowBackendModal(false)}>
-              <Icon name="close" size={24} color={theme.colors.textPrimary} />
+              <Icon name='close' size={24} color={theme.colors.textPrimary} />
             </TouchableOpacity>
           </View>
-          
-          <TouchableOpacity
-            style={[styles.backendOption, aiBackend === 'auto' && styles.backendOptionActive]}
-            onPress={() => handleBackendChange('auto')}
-          >
+
+          <TouchableOpacity style={[styles.backendOption, aiBackend === 'auto' && styles.backendOptionActive]} onPress={() => handleBackendChange('auto')}>
             <View style={styles.backendOptionIcon}>
-              <Icon name="sync" size={24} color={theme.colors.primary} />
+              <Icon name='sync' size={24} color={theme.colors.primary} />
             </View>
             <View style={styles.backendOptionContent}>
               <Text style={styles.backendOptionTitle}>自动选择</Text>
               <Text style={styles.backendOptionSubtitle}>优先使用本地模型，不可用时切换到云端</Text>
             </View>
-            {aiBackend === 'auto' && (
-              <Icon name="checkmark" size={20} color={theme.colors.primary} />
-            )}
+            {aiBackend === 'auto' && <Icon name='checkmark' size={20} color={theme.colors.primary} />}
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.backendOption, aiBackend === 'ollama' && styles.backendOptionActive]}
-            onPress={() => handleBackendChange('ollama')}
-          >
+          <TouchableOpacity style={[styles.backendOption, aiBackend === 'ollama' && styles.backendOptionActive]} onPress={() => handleBackendChange('ollama')}>
             <View style={[styles.backendOptionIcon, { backgroundColor: `${theme.colors.success}20` }]}>
-              <Icon name="desktop" size={24} color={theme.colors.success} />
+              <Icon name='desktop' size={24} color={theme.colors.success} />
             </View>
             <View style={styles.backendOptionContent}>
               <Text style={styles.backendOptionTitle}>Ollama 本地模型</Text>
-              <Text style={styles.backendOptionSubtitle}>
-                {ollamaStatus ? '已连接 - 数据不上传云端' : '未连接 - 请启动 Ollama 服务'}
-              </Text>
+              <Text style={styles.backendOptionSubtitle}>{ollamaStatus ? '已连接 - 数据不上传云端' : '未连接 - 请启动 Ollama 服务'}</Text>
             </View>
-            {aiBackend === 'ollama' && (
-              <Icon name="checkmark" size={20} color={theme.colors.primary} />
-            )}
+            {aiBackend === 'ollama' && <Icon name='checkmark' size={20} color={theme.colors.primary} />}
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.backendOption, aiBackend === 'openai' && styles.backendOptionActive]}
-            onPress={() => handleBackendChange('openai')}
-          >
+          <TouchableOpacity style={[styles.backendOption, aiBackend === 'openai' && styles.backendOptionActive]} onPress={() => handleBackendChange('openai')}>
             <View style={[styles.backendOptionIcon, { backgroundColor: `${theme.colors.warning}20` }]}>
-              <Icon name="cloud" size={24} color={theme.colors.warning} />
+              <Icon name='cloud' size={24} color={theme.colors.warning} />
             </View>
             <View style={styles.backendOptionContent}>
               <Text style={styles.backendOptionTitle}>云端 AI</Text>
               <Text style={styles.backendOptionSubtitle}>使用云端大模型，需要网络连接</Text>
             </View>
-            {aiBackend === 'openai' && (
-              <Icon name="checkmark" size={20} color={theme.colors.primary} />
-            )}
+            {aiBackend === 'openai' && <Icon name='checkmark' size={20} color={theme.colors.primary} />}
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowBackendModal(false)}>
@@ -259,33 +229,10 @@ export const SettingsScreen: React.FC = () => {
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>通用设置</Text>
       <View style={styles.settingsCard}>
-        <SettingItem
-          icon="moon"
-          iconColor={theme.colors.indigo}
-          title="深色模式"
-          subtitle="跟随系统"
-          showArrow
-        />
-        <SettingItem
-          icon="notifications"
-          iconColor={theme.colors.pink}
-          title="通知设置"
-          showArrow
-        />
-        <SettingItem
-          icon="shield-checkmark"
-          iconColor={theme.colors.success}
-          title="隐私与安全"
-          showArrow
-        />
-        <SettingItem
-          icon="globe"
-          iconColor={theme.colors.teal}
-          title="语言"
-          subtitle="中文 (简体)"
-          showArrow
-          isLast
-        />
+        <SettingItem icon='moon' iconColor={theme.colors.indigo} title='深色模式' subtitle='跟随系统' showArrow />
+        <SettingItem icon='notifications' iconColor={theme.colors.pink} title='通知设置' showArrow />
+        <SettingItem icon='shield-checkmark' iconColor={theme.colors.success} title='隐私与安全' showArrow />
+        <SettingItem icon='globe' iconColor={theme.colors.teal} title='语言' subtitle='中文 (简体)' showArrow isLast />
       </View>
     </View>
   );
@@ -294,32 +241,10 @@ export const SettingsScreen: React.FC = () => {
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>关于</Text>
       <View style={styles.settingsCard}>
-        <SettingItem
-          icon="help-circle"
-          iconColor={theme.colors.gray1}
-          title="帮助与反馈"
-          showArrow
-        />
-        <SettingItem
-          icon="star"
-          iconColor={theme.colors.warning}
-          title="评分"
-          showArrow
-        />
-        <SettingItem
-          icon="document-text"
-          iconColor={theme.colors.gray1}
-          title="隐私政策"
-          showArrow
-        />
-        <SettingItem
-          icon="information-circle"
-          iconColor={theme.colors.gray1}
-          title="关于我们"
-          subtitle="版本 1.0.0"
-          showArrow
-          isLast
-        />
+        <SettingItem icon='help-circle' iconColor={theme.colors.gray1} title='帮助与反馈' showArrow />
+        <SettingItem icon='star' iconColor={theme.colors.warning} title='评分' showArrow />
+        <SettingItem icon='document-text' iconColor={theme.colors.gray1} title='隐私政策' showArrow />
+        <SettingItem icon='information-circle' iconColor={theme.colors.gray1} title='关于我们' subtitle='版本 1.0.0' showArrow isLast />
       </View>
     </View>
   );
@@ -332,12 +257,13 @@ export const SettingsScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle='light-content' />
       {renderHeader()}
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {renderProfileCard()}
         {renderStorageSection()}
         {renderSettingsSection()}
+        {renderPlaybackSettingsSection()}
         {renderAISettingsSection()}
         {renderGeneralSection()}
         {renderAboutSection()}
@@ -360,16 +286,7 @@ interface SettingItemProps {
   isLast?: boolean;
 }
 
-const SettingItem: React.FC<SettingItemProps> = ({
-  icon,
-  iconColor,
-  title,
-  subtitle,
-  showArrow,
-  showSwitch,
-  switchValue,
-  isLast,
-}) => {
+const SettingItem: React.FC<SettingItemProps> = ({ icon, iconColor, title, subtitle, showArrow, showSwitch, switchValue, isLast }) => {
   return (
     <TouchableOpacity style={[styles.settingItem, isLast && styles.settingItemLast]}>
       <View style={[styles.settingIcon, { backgroundColor: `${iconColor}20` }]}>
@@ -379,16 +296,7 @@ const SettingItem: React.FC<SettingItemProps> = ({
         <Text style={styles.settingTitle}>{title}</Text>
         {subtitle && <Text style={styles.settingSubtitle}>{subtitle}</Text>}
       </View>
-      {showSwitch ? (
-        <Switch
-          value={switchValue}
-          onValueChange={() => {}}
-          trackColor={{ false: theme.colors.backgroundTertiary, true: theme.colors.primary }}
-          thumbColor="#fff"
-        />
-      ) : showArrow ? (
-        <Icon name="chevron-forward" size={20} color={theme.colors.textSecondary} />
-      ) : null}
+      {showSwitch ? <Switch value={switchValue} onValueChange={() => {}} trackColor={{ false: theme.colors.backgroundTertiary, true: theme.colors.primary }} thumbColor='#fff' /> : showArrow ? <Icon name='chevron-forward' size={20} color={theme.colors.textSecondary} /> : null}
     </TouchableOpacity>
   );
 };

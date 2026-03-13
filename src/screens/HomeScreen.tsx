@@ -1,22 +1,23 @@
 import React, { useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  SafeAreaView,
-  StatusBar,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, StatusBar } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAppStore } from '@store/index';
 import { theme, utils } from '@utils/theme';
-import { Recording } from '@types/index';
+import { Recording, RootStackParamList } from '../types/index';
+
+type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 export const HomeScreen: React.FC = () => {
+  const navigation = useNavigation<NavigationProp>();
   const { recordings, user, getRecentRecordings } = useAppStore();
   const [recentRecordings, setRecentRecordings] = useState<Recording[]>([]);
   const [greeting, setGreeting] = useState('');
+
+  const handleRecordingPress = (recordingId: string) => {
+    navigation.navigate('Editor', { recordingId });
+  };
 
   useEffect(() => {
     setGreeting(utils.getGreeting());
@@ -24,17 +25,13 @@ export const HomeScreen: React.FC = () => {
   }, [recordings]);
 
   const stats = {
-    total: recordings.filter(r => !r.isDeleted).length,
-    thisMonth: recordings.filter(r => {
+    total: recordings.filter((r) => !r.isDeleted).length,
+    thisMonth: recordings.filter((r) => {
       const date = new Date(r.createdAt);
       const now = new Date();
       return !r.isDeleted && date.getMonth() === now.getMonth();
     }).length,
-    duration: Math.floor(
-      recordings
-        .filter(r => !r.isDeleted)
-        .reduce((acc, r) => acc + r.duration, 0) / 3600000
-    ),
+    duration: Math.floor(recordings.filter((r) => !r.isDeleted).reduce((acc, r) => acc + r.duration, 0) / 3600000),
   };
 
   const renderHeader = () => (
@@ -44,9 +41,7 @@ export const HomeScreen: React.FC = () => {
         <Text style={styles.userName}>{user?.name || '用户'}</Text>
       </View>
       <TouchableOpacity style={styles.avatar}>
-        <Text style={styles.avatarText}>
-          {(user?.name || '用').charAt(0)}
-        </Text>
+        <Text style={styles.avatarText}>{(user?.name || '用').charAt(0)}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -72,13 +67,13 @@ export const HomeScreen: React.FC = () => {
     <TouchableOpacity style={styles.mainAction}>
       <View style={styles.mainActionContent}>
         <View style={styles.mainActionIcon}>
-          <Icon name="mic" size={28} color="#fff" />
+          <Icon name='mic' size={28} color='#fff' />
         </View>
         <View style={styles.mainActionText}>
           <Text style={styles.mainActionTitle}>开始录音</Text>
           <Text style={styles.mainActionSubtitle}>点击开始实时转写</Text>
         </View>
-        <Icon name="chevron-forward" size={24} color="#fff" />
+        <Icon name='chevron-forward' size={24} color='#fff' />
       </View>
     </TouchableOpacity>
   );
@@ -87,15 +82,15 @@ export const HomeScreen: React.FC = () => {
     <View style={styles.secondaryActions}>
       <TouchableOpacity style={styles.secondaryAction}>
         <View style={[styles.secondaryActionIcon, { backgroundColor: 'rgba(0, 122, 255, 0.15)' }]}>
-          <Icon name="cloud-upload-outline" size={20} color={theme.colors.primary} />
+          <Icon name='cloud-upload-outline' size={20} color={theme.colors.primary} />
         </View>
         <Text style={styles.secondaryActionTitle}>导入音频</Text>
         <Text style={styles.secondaryActionSubtitle}>从本地导入</Text>
       </TouchableOpacity>
-      
+
       <TouchableOpacity style={styles.secondaryAction}>
         <View style={[styles.secondaryActionIcon, { backgroundColor: 'rgba(255, 149, 0, 0.15)' }]}>
-          <Icon name="folder-outline" size={20} color={theme.colors.warning} />
+          <Icon name='folder-outline' size={20} color={theme.colors.warning} />
         </View>
         <Text style={styles.secondaryActionTitle}>文件夹</Text>
         <Text style={styles.secondaryActionSubtitle}>管理文件</Text>
@@ -110,7 +105,7 @@ export const HomeScreen: React.FC = () => {
     return (
       <TouchableOpacity style={styles.storageWarning}>
         <View style={styles.storageWarningIcon}>
-          <Icon name="warning" size={18} color={theme.colors.warning} />
+          <Icon name='warning' size={18} color={theme.colors.warning} />
         </View>
         <View style={styles.storageWarningContent}>
           <Text style={styles.storageWarningTitle}>存储空间不足</Text>
@@ -118,7 +113,7 @@ export const HomeScreen: React.FC = () => {
             已使用 {utils.formatFileSize(user?.storageUsed || 0)} / {utils.formatFileSize(user?.storageLimit || 0)}
           </Text>
         </View>
-        <Icon name="chevron-forward" size={18} color={theme.colors.warning} />
+        <Icon name='chevron-forward' size={18} color={theme.colors.warning} />
       </TouchableOpacity>
     );
   };
@@ -135,45 +130,37 @@ export const HomeScreen: React.FC = () => {
       {recentRecordings.length === 0 ? (
         <View style={styles.emptyState}>
           <View style={styles.emptyStateIcon}>
-            <Icon name="mic-off" size={32} color={theme.colors.gray1} />
+            <Icon name='mic-off' size={32} color={theme.colors.gray1} />
           </View>
           <Text style={styles.emptyStateTitle}>还没有录音</Text>
           <Text style={styles.emptyStateSubtitle}>点击上方按钮开始录音</Text>
         </View>
       ) : (
         recentRecordings.map((recording) => (
-          <TouchableOpacity key={recording.id} style={styles.recordCard}>
+          <TouchableOpacity key={recording.id} style={styles.recordCard} onPress={() => handleRecordingPress(recording.id)}>
             <View style={styles.recordCardHeader}>
               <View style={styles.recordIcon}>
-                <Icon name="mic" size={20} color="#fff" />
+                <Icon name='mic' size={20} color='#fff' />
               </View>
               <View style={styles.recordInfo}>
                 <Text style={styles.recordTitle} numberOfLines={1}>
                   {recording.title}
                 </Text>
                 <View style={styles.recordMeta}>
-                  <Text style={styles.recordMetaText}>
-                    {utils.formatDate(recording.createdAt)}
-                  </Text>
+                  <Text style={styles.recordMetaText}>{utils.formatDate(recording.createdAt)}</Text>
                   <View style={styles.recordMetaDot} />
-                  <Text style={styles.recordMetaText}>
-                    {utils.formatTime(recording.createdAt)}
-                  </Text>
+                  <Text style={styles.recordMetaText}>{utils.formatTime(recording.createdAt)}</Text>
                   {recording.transcription && (
                     <>
                       <View style={styles.recordMetaDot} />
-                      <Text style={styles.recordMetaText}>
-                        {recording.transcription.segments.length}位发言人
-                      </Text>
+                      <Text style={styles.recordMetaText}>{recording.transcription.segments.length}位发言人</Text>
                     </>
                   )}
                 </View>
               </View>
-              <Text style={styles.recordDuration}>
-                {utils.formatDuration(recording.duration)}
-              </Text>
+              <Text style={styles.recordDuration}>{utils.formatDuration(recording.duration)}</Text>
             </View>
-            
+
             <View style={styles.recordCardFooter}>
               <View style={styles.recordTags}>
                 {recording.tags?.map((tag, index) => (
@@ -197,7 +184,7 @@ export const HomeScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle='light-content' />
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {renderHeader()}
         {renderStats()}

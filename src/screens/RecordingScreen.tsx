@@ -17,14 +17,14 @@ import { theme, utils } from '@utils/theme';
 
 export const RecordingScreen: React.FC = () => {
   const { addRecording } = useAppStore();
-  const { 
-    status, 
-    duration, 
-    startRecording, 
-    pauseRecording, 
-    resumeRecording, 
+  const {
+    status,
+    duration,
+    startRecording,
+    pauseRecording,
+    resumeRecording,
     stopRecording,
-    setRecordingDuration 
+    setRecordingDuration
   } = useRecordingStore();
   
   const [transcription, setTranscription] = useState('');

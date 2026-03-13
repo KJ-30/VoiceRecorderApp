@@ -1,5 +1,5 @@
 // AI 服务适配器 - 支持 Ollama 和 OpenAI 双后端
-import { Summary, Todo, Transcription } from '@types/index';
+import { Summary, Todo, Transcription } from '../types/index';
 import { ollamaService } from './ollama';
 import { aiService } from './ai';
 

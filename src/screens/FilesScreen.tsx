@@ -1,20 +1,16 @@
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  SafeAreaView,
-  StatusBar,
-  ScrollView,
-  TextInput,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, StatusBar, ScrollView, TextInput } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAppStore } from '@store/index';
 import { theme, utils } from '@utils/theme';
-import { Recording, Folder } from '@types/index';
+import { Recording, Folder, RootStackParamList } from '../types/index';
+
+type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 export const FilesScreen: React.FC = () => {
+  const navigation = useNavigation<NavigationProp>();
   const { recordings, folders } = useAppStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
@@ -22,26 +18,27 @@ export const FilesScreen: React.FC = () => {
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
 
-  const filteredRecordings = recordings.filter(recording => {
+  const handleRecordingPress = (recordingId: string) => {
+    if (isSelectionMode) {
+      handleSelectItem(recordingId);
+    } else {
+      navigation.navigate('Editor', { recordingId });
+    }
+  };
+
+  const filteredRecordings = recordings.filter((recording) => {
     if (recording.isDeleted) return false;
     if (selectedFolder && recording.folderId !== selectedFolder) return false;
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
-      return (
-        recording.title.toLowerCase().includes(query) ||
-        recording.transcription?.text.toLowerCase().includes(query)
-      );
+      return recording.title.toLowerCase().includes(query) || recording.transcription?.text.toLowerCase().includes(query);
     }
     return true;
   });
 
   const handleSelectItem = (id: string) => {
     if (isSelectionMode) {
-      setSelectedItems(prev => 
-        prev.includes(id) 
-          ? prev.filter(item => item !== id)
-          : [...prev, id]
-      );
+      setSelectedItems((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
     }
   };
 
@@ -49,16 +46,10 @@ export const FilesScreen: React.FC = () => {
     <View style={styles.header}>
       <Text style={styles.headerTitle}>文件管理</Text>
       <View style={styles.headerActions}>
-        <TouchableOpacity 
-          style={styles.headerButton}
-          onPress={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
-        >
+        <TouchableOpacity style={styles.headerButton} onPress={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}>
           <Icon name={viewMode === 'grid' ? 'list' : 'grid'} size={22} color={theme.colors.textPrimary} />
         </TouchableOpacity>
-        <TouchableOpacity 
-          style={styles.headerButton}
-          onPress={() => setIsSelectionMode(!isSelectionMode)}
-        >
+        <TouchableOpacity style={styles.headerButton} onPress={() => setIsSelectionMode(!isSelectionMode)}>
           <Icon name={isSelectionMode ? 'close' : 'checkmark-circle'} size={22} color={theme.colors.textPrimary} />
         </TouchableOpacity>
       </View>
@@ -68,17 +59,11 @@ export const FilesScreen: React.FC = () => {
   const renderSearchBar = () => (
     <View style={styles.searchContainer}>
       <View style={styles.searchBar}>
-        <Icon name="search" size={18} color={theme.colors.textSecondary} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="搜索录音..."
-          placeholderTextColor={theme.colors.textSecondary}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
+        <Icon name='search' size={18} color={theme.colors.textSecondary} />
+        <TextInput style={styles.searchInput} placeholder='搜索录音...' placeholderTextColor={theme.colors.textSecondary} value={searchQuery} onChangeText={setSearchQuery} />
         {searchQuery.length > 0 && (
           <TouchableOpacity onPress={() => setSearchQuery('')}>
-            <Icon name="close-circle" size={18} color={theme.colors.textSecondary} />
+            <Icon name='close-circle' size={18} color={theme.colors.textSecondary} />
           </TouchableOpacity>
         )}
       </View>
@@ -93,36 +78,19 @@ export const FilesScreen: React.FC = () => {
           <Text style={styles.sectionAction}>新建</Text>
         </TouchableOpacity>
       </View>
-      <ScrollView 
-        horizontal 
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.foldersScroll}
-      >
-        <TouchableOpacity
-          style={[
-            styles.folderCard,
-            selectedFolder === null && styles.folderCardActive
-          ]}
-          onPress={() => setSelectedFolder(null)}
-        >
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.foldersScroll}>
+        <TouchableOpacity style={[styles.folderCard, selectedFolder === null && styles.folderCardActive]} onPress={() => setSelectedFolder(null)}>
           <View style={[styles.folderIcon, { backgroundColor: theme.colors.primary }]}>
-            <Icon name="folder" size={24} color="#fff" />
+            <Icon name='folder' size={24} color='#fff' />
           </View>
           <Text style={styles.folderName}>全部</Text>
-          <Text style={styles.folderCount}>{recordings.filter(r => !r.isDeleted).length} 个文件</Text>
+          <Text style={styles.folderCount}>{recordings.filter((r) => !r.isDeleted).length} 个文件</Text>
         </TouchableOpacity>
 
-        {folders.map(folder => (
-          <TouchableOpacity
-            key={folder.id}
-            style={[
-              styles.folderCard,
-              selectedFolder === folder.id && styles.folderCardActive
-            ]}
-            onPress={() => setSelectedFolder(folder.id)}
-          >
+        {folders.map((folder) => (
+          <TouchableOpacity key={folder.id} style={[styles.folderCard, selectedFolder === folder.id && styles.folderCardActive]} onPress={() => setSelectedFolder(folder.id)}>
             <View style={[styles.folderIcon, { backgroundColor: folder.color }]}>
-              <Icon name={folder.icon as any} size={24} color="#fff" />
+              <Icon name={folder.icon as any} size={24} color='#fff' />
             </View>
             <Text style={styles.folderName}>{folder.name}</Text>
             <Text style={styles.folderCount}>{folder.recordingCount} 个文件</Text>
@@ -131,7 +99,7 @@ export const FilesScreen: React.FC = () => {
 
         <TouchableOpacity style={styles.addFolderCard}>
           <View style={styles.addFolderIcon}>
-            <Icon name="add" size={28} color={theme.colors.primary} />
+            <Icon name='add' size={28} color={theme.colors.primary} />
           </View>
           <Text style={styles.addFolderText}>新建文件夹</Text>
         </TouchableOpacity>
@@ -166,30 +134,13 @@ export const FilesScreen: React.FC = () => {
 
   const renderRecordingGrid = () => (
     <View style={styles.recordingsGrid}>
-      {filteredRecordings.map(recording => (
-        <TouchableOpacity
-          key={recording.id}
-          style={[
-            styles.recordingCard,
-            isSelectionMode && selectedItems.includes(recording.id) && styles.recordingCardSelected
-          ]}
-          onPress={() => handleSelectItem(recording.id)}
-          onLongPress={() => setIsSelectionMode(true)}
-        >
+      {filteredRecordings.map((recording) => (
+        <TouchableOpacity key={recording.id} style={[styles.recordingCard, isSelectionMode && selectedItems.includes(recording.id) && styles.recordingCardSelected]} onPress={() => handleRecordingPress(recording.id)} onLongPress={() => setIsSelectionMode(true)}>
           <View style={styles.recordingCardHeader}>
             <View style={styles.recordingIcon}>
-              <Icon name="mic" size={20} color="#fff" />
+              <Icon name='mic' size={20} color='#fff' />
             </View>
-            {isSelectionMode && (
-              <View style={[
-                styles.selectionIndicator,
-                selectedItems.includes(recording.id) && styles.selectionIndicatorSelected
-              ]}>
-                {selectedItems.includes(recording.id) && (
-                  <Icon name="checkmark" size={14} color="#fff" />
-                )}
-              </View>
-            )}
+            {isSelectionMode && <View style={[styles.selectionIndicator, selectedItems.includes(recording.id) && styles.selectionIndicatorSelected]}>{selectedItems.includes(recording.id) && <Icon name='checkmark' size={14} color='#fff' />}</View>}
           </View>
           <Text style={styles.recordingCardTitle} numberOfLines={1}>
             {recording.title}
@@ -210,44 +161,25 @@ export const FilesScreen: React.FC = () => {
 
   const renderRecordingList = () => (
     <View style={styles.recordingsList}>
-      {filteredRecordings.map(recording => (
-        <TouchableOpacity
-          key={recording.id}
-          style={[
-            styles.recordingListItem,
-            isSelectionMode && selectedItems.includes(recording.id) && styles.recordingListItemSelected
-          ]}
-          onPress={() => handleSelectItem(recording.id)}
-          onLongPress={() => setIsSelectionMode(true)}
-        >
+      {filteredRecordings.map((recording) => (
+        <TouchableOpacity key={recording.id} style={[styles.recordingListItem, isSelectionMode && selectedItems.includes(recording.id) && styles.recordingListItemSelected]} onPress={() => handleRecordingPress(recording.id)} onLongPress={() => setIsSelectionMode(true)}>
           <View style={styles.recordingListIcon}>
-            <Icon name="mic" size={20} color="#fff" />
+            <Icon name='mic' size={20} color='#fff' />
           </View>
           <View style={styles.recordingListInfo}>
             <Text style={styles.recordingListTitle} numberOfLines={1}>
               {recording.title}
             </Text>
             <View style={styles.recordingListMeta}>
-              <Text style={styles.recordingListMetaText}>
-                {utils.formatDate(recording.createdAt)}
-              </Text>
+              <Text style={styles.recordingListMetaText}>{utils.formatDate(recording.createdAt)}</Text>
               <View style={styles.recordingListMetaDot} />
-              <Text style={styles.recordingListMetaText}>
-                {utils.formatDuration(recording.duration)}
-              </Text>
+              <Text style={styles.recordingListMetaText}>{utils.formatDuration(recording.duration)}</Text>
             </View>
           </View>
           {isSelectionMode ? (
-            <View style={[
-              styles.listSelectionIndicator,
-              selectedItems.includes(recording.id) && styles.listSelectionIndicatorSelected
-            ]}>
-              {selectedItems.includes(recording.id) && (
-                <Icon name="checkmark" size={14} color="#fff" />
-              )}
-            </View>
+            <View style={[styles.listSelectionIndicator, selectedItems.includes(recording.id) && styles.listSelectionIndicatorSelected]}>{selectedItems.includes(recording.id) && <Icon name='checkmark' size={14} color='#fff' />}</View>
           ) : (
-            <Icon name="chevron-forward" size={20} color={theme.colors.textSecondary} />
+            <Icon name='chevron-forward' size={20} color={theme.colors.textSecondary} />
           )}
         </TouchableOpacity>
       ))}
@@ -260,15 +192,15 @@ export const FilesScreen: React.FC = () => {
     return (
       <View style={styles.selectionToolbar}>
         <TouchableOpacity style={styles.selectionToolbarButton}>
-          <Icon name="folder-open" size={20} color={theme.colors.textPrimary} />
+          <Icon name='folder-open' size={20} color={theme.colors.textPrimary} />
           <Text style={styles.selectionToolbarText}>移动</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.selectionToolbarButton}>
-          <Icon name="share-outline" size={20} color={theme.colors.textPrimary} />
+          <Icon name='share-outline' size={20} color={theme.colors.textPrimary} />
           <Text style={styles.selectionToolbarText}>分享</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.selectionToolbarButton}>
-          <Icon name="trash-outline" size={20} color={theme.colors.danger} />
+          <Icon name='trash-outline' size={20} color={theme.colors.danger} />
           <Text style={[styles.selectionToolbarText, { color: theme.colors.danger }]}>删除</Text>
         </TouchableOpacity>
       </View>
@@ -277,7 +209,7 @@ export const FilesScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle='light-content' />
       {renderHeader()}
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {renderSearchBar()}
