@@ -9,6 +9,7 @@ import {
   ScrollView,
   Switch,
   Modal,
+  Alert,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useAppStore } from '@store/index';
@@ -16,16 +17,60 @@ import { theme, utils } from '@utils/theme';
 import { aiService } from '@services/ai';
 import { ollamaService } from '@services/ollama';
 import { AIBackend } from '@services/ai-adapter';
+import { audioPlayerService } from '@services/audioPlayer';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const PLAYBACK_RESUME_KEY = '@playback_resume_enabled';
 
 export const SettingsScreen: React.FC = () => {
   const { user } = useAppStore();
   const [aiBackend, setAiBackend] = useState<AIBackend>('auto');
   const [ollamaStatus, setOllamaStatus] = useState(false);
   const [showBackendModal, setShowBackendModal] = useState(false);
+  const [autoResume, setAutoResume] = useState(true);
 
   useEffect(() => {
     checkAIBackendStatus();
+    loadPlaybackSettings();
   }, []);
+
+  const loadPlaybackSettings = async () => {
+    try {
+      const value = await AsyncStorage.getItem(PLAYBACK_RESUME_KEY);
+      if (value !== null) {
+        setAutoResume(value === 'true');
+      }
+    } catch (error) {
+      console.error('加载播放设置失败:', error);
+    }
+  };
+
+  const toggleAutoResume = async (value: boolean) => {
+    setAutoResume(value);
+    try {
+      await AsyncStorage.setItem(PLAYBACK_RESUME_KEY, String(value));
+    } catch (error) {
+      console.error('保存播放设置失败:', error);
+    }
+  };
+
+  const handleClearPlaybackPositions = () => {
+    Alert.alert(
+      '清除断点记录',
+      '确定要清除所有播放位置记录吗？清除后将无法恢复。',
+      [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '确定',
+          style: 'destructive',
+          onPress: async () => {
+            await audioPlayerService.clearAllPlaybackPositions();
+            Alert.alert('成功', '已清除所有断点记录');
+          },
+        },
+      ]
+    );
+  };
 
   const checkAIBackendStatus = async () => {
     const status = await ollamaService.checkAvailability();
@@ -126,6 +171,36 @@ export const SettingsScreen: React.FC = () => {
           showArrow
           isLast
         />
+      </View>
+    </View>
+  );
+
+  const renderPlaybackSection = () => (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>播放设置</Text>
+      <View style={styles.settingsCard}>
+        <SettingItem
+          icon="play-skip-forward"
+          iconColor={theme.colors.primary}
+          title="断点续播"
+          subtitle="自动从上次位置继续播放"
+          showSwitch
+          switchValue={autoResume}
+          onSwitchChange={toggleAutoResume}
+        />
+        <TouchableOpacity 
+          style={[styles.settingItem, styles.settingItemLast]} 
+          onPress={handleClearPlaybackPositions}
+        >
+          <View style={[styles.settingIcon, { backgroundColor: `${theme.colors.danger}20` }]}>
+            <Icon name="trash" size={20} color={theme.colors.danger} />
+          </View>
+          <View style={styles.settingContent}>
+            <Text style={[styles.settingTitle, { color: theme.colors.danger }]}>清除断点记录</Text>
+            <Text style={styles.settingSubtitle}>清除所有播放位置记录</Text>
+          </View>
+          <Icon name="chevron-forward" size={20} color={theme.colors.textSecondary} />
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -338,6 +413,7 @@ export const SettingsScreen: React.FC = () => {
         {renderProfileCard()}
         {renderStorageSection()}
         {renderSettingsSection()}
+        {renderPlaybackSection()}
         {renderAISettingsSection()}
         {renderGeneralSection()}
         {renderAboutSection()}
@@ -357,6 +433,7 @@ interface SettingItemProps {
   showArrow?: boolean;
   showSwitch?: boolean;
   switchValue?: boolean;
+  onSwitchChange?: (value: boolean) => void;
   isLast?: boolean;
 }
 
@@ -368,6 +445,7 @@ const SettingItem: React.FC<SettingItemProps> = ({
   showArrow,
   showSwitch,
   switchValue,
+  onSwitchChange,
   isLast,
 }) => {
   return (
@@ -382,7 +460,7 @@ const SettingItem: React.FC<SettingItemProps> = ({
       {showSwitch ? (
         <Switch
           value={switchValue}
-          onValueChange={() => {}}
+          onValueChange={onSwitchChange}
           trackColor={{ false: theme.colors.backgroundTertiary, true: theme.colors.primary }}
           thumbColor="#fff"
         />

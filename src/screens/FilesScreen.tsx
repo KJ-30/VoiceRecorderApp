@@ -8,11 +8,15 @@ import {
   StatusBar,
   ScrollView,
   TextInput,
+  Modal,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useAppStore } from '@store/index';
 import { theme, utils } from '@utils/theme';
 import { Recording, Folder } from '@types/index';
+import { audioEditorService } from '@services/audioEditor';
 
 export const FilesScreen: React.FC = () => {
   const { recordings, folders } = useAppStore();
@@ -21,6 +25,9 @@ export const FilesScreen: React.FC = () => {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [showMergeModal, setShowMergeModal] = useState(false);
+  const [isMerging, setIsMerging] = useState(false);
+  const [mergeFileName, setMergeFileName] = useState('');
 
   const filteredRecordings = recordings.filter(recording => {
     if (recording.isDeleted) return false;
@@ -44,6 +51,144 @@ export const FilesScreen: React.FC = () => {
       );
     }
   };
+
+  const handleMerge = async () => {
+    if (selectedItems.length < 2) {
+      Alert.alert('提示', '请至少选择2个音频文件进行合并');
+      return;
+    }
+
+    if (selectedItems.length > 5) {
+      Alert.alert('提示', '最多支持合并5个音频文件');
+      return;
+    }
+
+    const selectedRecordings = selectedItems.map(id => 
+      recordings.find(r => r.id === id)
+    ).filter(Boolean) as Recording[];
+
+    const uris = selectedRecordings.map(r => r.uri).filter(Boolean);
+    if (uris.length !== selectedItems.length) {
+      Alert.alert('错误', '部分文件路径无效');
+      return;
+    }
+
+    setShowMergeModal(true);
+    setMergeFileName(`合并_${selectedRecordings.length}个文件`);
+  };
+
+  const confirmMerge = async () => {
+    if (!mergeFileName.trim()) {
+      Alert.alert('提示', '请输入文件名');
+      return;
+    }
+
+    setIsMerging(true);
+    try {
+      const selectedRecordings = selectedItems.map(id => 
+        recordings.find(r => r.id === id)
+      ).filter(Boolean) as Recording[];
+
+      const uris = selectedRecordings.map(r => r.uri);
+
+      const result = await audioEditorService.mergeAudios({
+        uris,
+        outputFileName: mergeFileName,
+      }, selectedRecordings.map(r => ({
+        duration: r.duration,
+        createdAt: r.createdAt,
+      })));
+
+      Alert.alert(
+        '合并成功',
+        `已创建: ${result.uri.split('/').pop()}\n时长: ${audioEditorService.formatTimeForDisplay(result.metadata.duration)}`,
+        [
+          { 
+            text: '确定', 
+            onPress: () => {
+              setShowMergeModal(false);
+              setIsSelectionMode(false);
+              setSelectedItems([]);
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      Alert.alert('合并失败', String(error));
+    } finally {
+      setIsMerging(false);
+    }
+  };
+
+  const selectedRecordingsForMerge = selectedItems.map(id => 
+    recordings.find(r => r.id === id)
+  ).filter(Boolean) as Recording[];
+
+  const renderMergeModal = () => (
+    <Modal
+      visible={showMergeModal}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setShowMergeModal(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.mergeModalContent}>
+          <View style={styles.mergeModalHeader}>
+            <TouchableOpacity onPress={() => setShowMergeModal(false)}>
+              <Text style={styles.mergeModalCancel}>取消</Text>
+            </TouchableOpacity>
+            <Text style={styles.mergeModalTitle}>合并音频</Text>
+            <TouchableOpacity 
+              onPress={confirmMerge}
+              disabled={isMerging}
+            >
+              <Text style={[
+                styles.mergeModalConfirm,
+                isMerging && styles.mergeModalConfirmDisabled
+              ]}>
+                {isMerging ? '合并中...' : '确认'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.mergeFileList}>
+            <Text style={styles.mergeFileListTitle}>已选择 {selectedRecordingsForMerge.length} 个文件</Text>
+            {selectedRecordingsForMerge.map((recording, index) => (
+              <View key={recording.id} style={styles.mergeFileItem}>
+                <View style={styles.mergeFileIndex}>
+                  <Text style={styles.mergeFileIndexText}>{index + 1}</Text>
+                </View>
+                <View style={styles.mergeFileInfo}>
+                  <Text style={styles.mergeFileName} numberOfLines={1}>{recording.title}</Text>
+                  <Text style={styles.mergeFileDuration}>
+                    {utils.formatDuration(recording.duration)}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+
+          <View style={styles.mergeInputSection}>
+            <Text style={styles.mergeInputLabel}>合并后文件名</Text>
+            <TextInput
+              style={styles.mergeInput}
+              value={mergeFileName}
+              onChangeText={setMergeFileName}
+              placeholder="输入文件名"
+              placeholderTextColor={theme.colors.textSecondary}
+            />
+          </View>
+
+          <View style={styles.mergeInfo}>
+            <Icon name="information-circle" size={16} color={theme.colors.textSecondary} />
+            <Text style={styles.mergeInfoText}>
+              合并后文件将保留原始录音的元数据信息
+            </Text>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
 
   const renderHeader = () => (
     <View style={styles.header}>
@@ -259,6 +404,15 @@ export const FilesScreen: React.FC = () => {
 
     return (
       <View style={styles.selectionToolbar}>
+        <TouchableOpacity 
+          style={styles.selectionToolbarButton}
+          onPress={handleMerge}
+        >
+          <Icon name="git-merge" size={20} color={theme.colors.primary} />
+          <Text style={[styles.selectionToolbarText, { color: theme.colors.primary }]}>
+            合并 ({selectedItems.length}/5)
+          </Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.selectionToolbarButton}>
           <Icon name="folder-open" size={20} color={theme.colors.textPrimary} />
           <Text style={styles.selectionToolbarText}>移动</Text>
@@ -286,6 +440,7 @@ export const FilesScreen: React.FC = () => {
         {viewMode === 'grid' ? renderRecordingGrid() : renderRecordingList()}
       </ScrollView>
       {renderSelectionToolbar()}
+      {renderMergeModal()}
     </SafeAreaView>
   );
 };
@@ -587,6 +742,113 @@ const styles = StyleSheet.create({
   selectionToolbarText: {
     fontSize: theme.typography.sizes.xs,
     color: theme.colors.textPrimary,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'flex-end',
+  },
+  mergeModalContent: {
+    backgroundColor: theme.colors.backgroundSecondary,
+    borderTopLeftRadius: theme.borderRadius.xl,
+    borderTopRightRadius: theme.borderRadius.xl,
+    padding: theme.spacing.lg,
+    paddingBottom: theme.spacing.xxl,
+    maxHeight: '80%',
+  },
+  mergeModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: theme.spacing.lg,
+  },
+  mergeModalCancel: {
+    fontSize: theme.typography.sizes.base,
+    color: theme.colors.textSecondary,
+  },
+  mergeModalTitle: {
+    fontSize: theme.typography.sizes.lg,
+    fontWeight: theme.typography.weights.semibold,
+    color: theme.colors.textPrimary,
+  },
+  mergeModalConfirm: {
+    fontSize: theme.typography.sizes.base,
+    color: theme.colors.primary,
+    fontWeight: theme.typography.weights.semibold,
+  },
+  mergeModalConfirmDisabled: {
+    color: theme.colors.textTertiary,
+  },
+  mergeFileList: {
+    marginBottom: theme.spacing.lg,
+  },
+  mergeFileListTitle: {
+    fontSize: theme.typography.sizes.sm,
+    color: theme.colors.textSecondary,
+    marginBottom: theme.spacing.md,
+  },
+  mergeFileItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.backgroundTertiary,
+    borderRadius: theme.borderRadius.md,
+    padding: theme.spacing.sm,
+    marginBottom: theme.spacing.sm,
+  },
+  mergeFileIndex: {
+    width: 28,
+    height: 28,
+    borderRadius: theme.borderRadius.full,
+    backgroundColor: theme.colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: theme.spacing.sm,
+  },
+  mergeFileIndexText: {
+    fontSize: theme.typography.sizes.xs,
+    fontWeight: theme.typography.weights.bold,
+    color: '#fff',
+  },
+  mergeFileInfo: {
+    flex: 1,
+  },
+  mergeFileName: {
+    fontSize: theme.typography.sizes.sm,
+    color: theme.colors.textPrimary,
+    fontWeight: theme.typography.weights.medium,
+  },
+  mergeFileDuration: {
+    fontSize: theme.typography.sizes.xs,
+    color: theme.colors.textSecondary,
+    marginTop: 2,
+  },
+  mergeInputSection: {
+    marginBottom: theme.spacing.lg,
+  },
+  mergeInputLabel: {
+    fontSize: theme.typography.sizes.sm,
+    color: theme.colors.textSecondary,
+    marginBottom: theme.spacing.sm,
+  },
+  mergeInput: {
+    backgroundColor: theme.colors.backgroundTertiary,
+    borderRadius: theme.borderRadius.md,
+    padding: theme.spacing.md,
+    fontSize: theme.typography.sizes.base,
+    color: theme.colors.textPrimary,
+  },
+  mergeInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.backgroundTertiary,
+    borderRadius: theme.borderRadius.md,
+  },
+  mergeInfoText: {
+    flex: 1,
+    fontSize: theme.typography.sizes.xs,
+    color: theme.colors.textSecondary,
   },
 });
 

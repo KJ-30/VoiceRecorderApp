@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,27 +9,147 @@ import {
   ScrollView,
   TextInput,
   Animated,
+  Modal,
+  PanResponder,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { theme, utils } from '@utils/theme';
 import { Recording, Transcription, Summary, Todo } from '@types/index';
+import { audioPlayerService, AudioPlayerState } from '@services/audioPlayer';
+import { audioEditorService, TrimOptions } from '@services/audioEditor';
 
 interface EditorScreenProps {
   recording: Recording;
+  navigation?: any;
 }
 
 type TabType = 'transcription' | 'summary' | 'todos';
 
-export const EditorScreen: React.FC<EditorScreenProps> = ({ recording }) => {
+export const EditorScreen: React.FC<EditorScreenProps> = ({ recording, navigation }) => {
   const [activeTab, setActiveTab] = useState<TabType>('transcription');
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [editedText, setEditedText] = useState(recording.transcription?.text || '');
   const [isEditing, setIsEditing] = useState(false);
+  const [playerState, setPlayerState] = useState<AudioPlayerState>({
+    isPlaying: false,
+    duration: 0,
+    position: 0,
+    speed: 1,
+    isLoaded: false,
+    isLoading: false,
+  });
+  
+  const [showTrimModal, setShowTrimModal] = useState(false);
+  const [showSpeedModal, setShowSpeedModal] = useState(false);
+  const [trimRange, setTrimRange] = useState<{ start: number; end: number }>({
+    start: 0,
+    end: recording.duration || 0,
+  });
+  const [isProcessing, setIsProcessing] = useState(false);
   
   const scrollY = useRef(new Animated.Value(0)).current;
-  const progressAnim = useRef(new Animated.Value(0)).current;
+  const progressRef = useRef<View>(null);
+  const progressBarWidth = useRef(0);
+
+  useEffect(() => {
+    if (recording?.uri) {
+      audioPlayerService.loadAudio(recording.uri, recording.id);
+    }
+
+    const unsubscribe = audioPlayerService.subscribe(setPlayerState);
+
+    return () => {
+      audioPlayerService.savePlaybackPosition(recording.id);
+      audioPlayerService.unloadAudio();
+      unsubscribe();
+    };
+  }, [recording?.id, recording?.uri]);
+
+  useEffect(() => {
+    setTrimRange({
+      start: 0,
+      end: playerState.duration || recording.duration || 0,
+    });
+  }, [playerState.duration, recording.duration]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (evt) => {
+        handleProgressTouch(evt.nativeEvent.locationX);
+      },
+      onPanResponderMove: (evt) => {
+        handleProgressTouch(evt.nativeEvent.locationX);
+      },
+      onPanResponderRelease: () => {
+      },
+    })
+  ).current;
+
+  const handleProgressTouch = useCallback((x: number) => {
+    if (progressBarWidth.current > 0 && playerState.duration > 0) {
+      const progress = Math.max(0, Math.min(1, x / progressBarWidth.current));
+      const position = progress * playerState.duration;
+      audioPlayerService.seekTo(position);
+    }
+  }, [playerState.duration]);
+
+  const handleProgressLayout = useCallback((event: any) => {
+    progressBarWidth.current = event.nativeEvent.layout.width;
+  }, []);
+
+  const handlePlayPause = useCallback(() => {
+    audioPlayerService.togglePlayPause();
+  }, []);
+
+  const handleSeek = useCallback((time: number) => {
+    audioPlayerService.seekTo(time);
+  }, []);
+
+  const handleSpeedChange = useCallback((speed: number) => {
+    audioPlayerService.setSpeed(speed);
+    setShowSpeedModal(false);
+  }, []);
+
+  const handleSeekBackward = useCallback(() => {
+    audioPlayerService.seekBackward(10000);
+  }, []);
+
+  const handleSeekForward = useCallback(() => {
+    audioPlayerService.seekForward(10000);
+  }, []);
+
+  const handleTrim = async () => {
+    if (trimRange.end <= trimRange.start) {
+      Alert.alert('错误', '结束时间必须大于开始时间');
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const result = await audioEditorService.trimAudio(recording.uri, {
+        startTime: trimRange.start,
+        endTime: trimRange.end,
+      }, {
+        duration: trimRange.end - trimRange.start,
+        createdAt: recording.createdAt,
+      });
+
+      Alert.alert(
+        '裁剪成功',
+        `已保存到: ${result.uri.split('/').pop()}`,
+        [
+          { text: '确定', onPress: () => setShowTrimModal(false) }
+        ]
+      );
+    } catch (error) {
+      Alert.alert('裁剪失败', String(error));
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   const tabs: { key: TabType; label: string; icon: string }[] = [
     { key: 'transcription', label: '转写文本', icon: 'text' },
@@ -37,25 +157,14 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({ recording }) => {
     { key: 'todos', label: '待办事项', icon: 'checkbox' },
   ];
 
-  const handlePlayPause = () => {
-    setIsPlaying(!isPlaying);
-  };
-
-  const handleSeek = (time: number) => {
-    setCurrentTime(time);
-    progressAnim.setValue(time / recording.duration);
-  };
-
-  const handleSpeedChange = () => {
-    const speeds = [0.5, 1, 1.5, 2];
-    const currentIndex = speeds.indexOf(playbackSpeed);
-    const nextIndex = (currentIndex + 1) % speeds.length;
-    setPlaybackSpeed(speeds[nextIndex]);
-  };
+  const speedOptions = audioPlayerService.getSpeedOptions();
 
   const renderHeader = () => (
     <View style={styles.header}>
-      <TouchableOpacity style={styles.backButton}>
+      <TouchableOpacity 
+        style={styles.backButton}
+        onPress={() => navigation?.goBack()}
+      >
         <Icon name="chevron-back" size={28} color={theme.colors.textPrimary} />
       </TouchableOpacity>
       <View style={styles.headerTitle}>
@@ -66,40 +175,271 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({ recording }) => {
           {utils.formatDate(recording.createdAt)} · {utils.formatDuration(recording.duration)}
         </Text>
       </View>
-      <TouchableOpacity style={styles.moreButton}>
-        <Icon name="ellipsis-horizontal" size={24} color={theme.colors.textPrimary} />
+      <TouchableOpacity 
+        style={styles.moreButton}
+        onPress={() => setShowTrimModal(true)}
+      >
+        <Icon name="cut-outline" size={24} color={theme.colors.textPrimary} />
       </TouchableOpacity>
     </View>
   );
 
-  const renderAudioPlayer = () => (
-    <View style={styles.audioPlayer}>
-      <TouchableOpacity style={styles.playButton} onPress={handlePlayPause}>
-        <Icon name={isPlaying ? 'pause' : 'play'} size={24} color="#fff" />
-      </TouchableOpacity>
-      
-      <View style={styles.progressContainer}>
-        <View style={styles.progressBar}>
-          <Animated.View 
-            style={[
-              styles.progressFill,
-              { width: progressAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: ['0%', '100%'],
-              })}
-            ]} 
-          />
+  const renderAudioPlayer = () => {
+    const progress = playerState.duration > 0 ? playerState.position / playerState.duration : 0;
+    const progressPercent = `${(progress * 100).toFixed(1)}%`;
+
+    return (
+      <View style={styles.audioPlayer}>
+        <TouchableOpacity 
+          style={styles.skipButton}
+          onPress={handleSeekBackward}
+        >
+          <Icon name="play-back" size={20} color={theme.colors.textSecondary} />
+          <Text style={styles.skipText}>10s</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.playButton} 
+          onPress={handlePlayPause}
+          disabled={playerState.isLoading}
+        >
+          {playerState.isLoading ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Icon name={playerState.isPlaying ? 'pause' : 'play'} size={24} color="#fff" />
+          )}
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.skipButton}
+          onPress={handleSeekForward}
+        >
+          <Icon name="play-forward" size={20} color={theme.colors.textSecondary} />
+          <Text style={styles.skipText}>10s</Text>
+        </TouchableOpacity>
+        
+        <View 
+          style={styles.progressContainer}
+          ref={progressRef}
+          onLayout={handleProgressLayout}
+          {...panResponder.panHandlers}
+        >
+          <View style={styles.progressBar}>
+            <View 
+              style={[
+                styles.progressFill,
+                { width: progressPercent }
+              ]} 
+            />
+            <View 
+              style={[
+                styles.progressThumb,
+                { left: progressPercent }
+              ]} 
+            />
+          </View>
+          <View style={styles.timeContainer}>
+            <Text style={styles.timeText}>
+              {audioPlayerService.formatPosition()}
+            </Text>
+            <Text style={styles.timeText}>
+              {audioPlayerService.formatDuration()}
+            </Text>
+          </View>
         </View>
-        <View style={styles.timeContainer}>
-          <Text style={styles.timeText}>{utils.formatDuration(currentTime)}</Text>
-          <Text style={styles.timeText}>{utils.formatDuration(recording.duration)}</Text>
+
+        <TouchableOpacity 
+          style={styles.speedButton} 
+          onPress={() => setShowSpeedModal(true)}
+        >
+          <Text style={styles.speedText}>{playerState.speed}x</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  const renderSpeedModal = () => (
+    <Modal
+      visible={showSpeedModal}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setShowSpeedModal(false)}
+    >
+      <TouchableOpacity 
+        style={styles.modalOverlay}
+        activeOpacity={1}
+        onPress={() => setShowSpeedModal(false)}
+      >
+        <View style={styles.speedModalContent}>
+          <Text style={styles.modalTitle}>播放速度</Text>
+          <View style={styles.speedOptions}>
+            {speedOptions.map((speed) => (
+              <TouchableOpacity
+                key={speed}
+                style={[
+                  styles.speedOption,
+                  playerState.speed === speed && styles.speedOptionActive
+                ]}
+                onPress={() => handleSpeedChange(speed)}
+              >
+                <Text style={[
+                  styles.speedOptionText,
+                  playerState.speed === speed && styles.speedOptionTextActive
+                ]}>
+                  {speed}x
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+
+  const renderTrimModal = () => (
+    <Modal
+      visible={showTrimModal}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setShowTrimModal(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.trimModalContent}>
+          <View style={styles.trimModalHeader}>
+            <TouchableOpacity onPress={() => setShowTrimModal(false)}>
+              <Text style={styles.trimModalCancel}>取消</Text>
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>裁剪音频</Text>
+            <TouchableOpacity 
+              onPress={handleTrim}
+              disabled={isProcessing}
+            >
+              <Text style={[
+                styles.trimModalConfirm,
+                isProcessing && styles.trimModalConfirmDisabled
+              ]}>
+                {isProcessing ? '处理中...' : '确认'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.trimPreview}>
+            <View style={styles.trimTimeBlock}>
+              <Text style={styles.trimTimeLabel}>开始时间</Text>
+              <Text style={styles.trimTimeValue}>
+                {audioEditorService.formatTimeForDisplay(trimRange.start)}
+              </Text>
+            </View>
+            <Icon name="arrow-forward" size={20} color={theme.colors.textSecondary} />
+            <View style={styles.trimTimeBlock}>
+              <Text style={styles.trimTimeLabel}>结束时间</Text>
+              <Text style={styles.trimTimeValue}>
+                {audioEditorService.formatTimeForDisplay(trimRange.end)}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.trimDurationInfo}>
+            <Text style={styles.trimDurationText}>
+              裁剪后时长: {audioEditorService.formatTimeForDisplay(trimRange.end - trimRange.start)}
+            </Text>
+          </View>
+
+          <View style={styles.trimControls}>
+            <Text style={styles.trimLabel}>开始位置</Text>
+            <View style={styles.sliderContainer}>
+              <View style={styles.sliderTrack}>
+                <View 
+                  style={[
+                    styles.sliderFill,
+                    { width: `${(trimRange.start / playerState.duration) * 100}%` }
+                  ]} 
+                />
+              </View>
+              <View style={styles.sliderButtons}>
+                <TouchableOpacity 
+                  style={styles.sliderButton}
+                  onPress={() => setTrimRange(prev => ({ 
+                    ...prev, 
+                    start: Math.max(0, prev.start - 5000) 
+                  }))}
+                >
+                  <Icon name="remove" size={20} color={theme.colors.textPrimary} />
+                </TouchableOpacity>
+                <Text style={styles.sliderValue}>
+                  {audioEditorService.formatTimeForDisplay(trimRange.start)}
+                </Text>
+                <TouchableOpacity 
+                  style={styles.sliderButton}
+                  onPress={() => setTrimRange(prev => ({ 
+                    ...prev, 
+                    start: Math.min(prev.end - 1000, prev.start + 5000) 
+                  }))}
+                >
+                  <Icon name="add" size={20} color={theme.colors.textPrimary} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <Text style={styles.trimLabel}>结束位置</Text>
+            <View style={styles.sliderContainer}>
+              <View style={styles.sliderTrack}>
+                <View 
+                  style={[
+                    styles.sliderFill,
+                    { width: `${(trimRange.end / playerState.duration) * 100}%` }
+                  ]} 
+                />
+              </View>
+              <View style={styles.sliderButtons}>
+                <TouchableOpacity 
+                  style={styles.sliderButton}
+                  onPress={() => setTrimRange(prev => ({ 
+                    ...prev, 
+                    end: Math.max(prev.start + 1000, prev.end - 5000) 
+                  }))}
+                >
+                  <Icon name="remove" size={20} color={theme.colors.textPrimary} />
+                </TouchableOpacity>
+                <Text style={styles.sliderValue}>
+                  {audioEditorService.formatTimeForDisplay(trimRange.end)}
+                </Text>
+                <TouchableOpacity 
+                  style={styles.sliderButton}
+                  onPress={() => setTrimRange(prev => ({ 
+                    ...prev, 
+                    end: Math.min(playerState.duration, prev.end + 5000) 
+                  }))}
+                >
+                  <Icon name="add" size={20} color={theme.colors.textPrimary} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.trimQuickActions}>
+            <TouchableOpacity 
+              style={styles.trimQuickButton}
+              onPress={() => setTrimRange({ start: 0, end: playerState.duration / 2 })}
+            >
+              <Text style={styles.trimQuickButtonText}>前半段</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.trimQuickButton}
+              onPress={() => setTrimRange({ start: playerState.duration / 2, end: playerState.duration })}
+            >
+              <Text style={styles.trimQuickButtonText}>后半段</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.trimQuickButton}
+              onPress={() => setTrimRange({ start: 0, end: playerState.duration })}
+            >
+              <Text style={styles.trimQuickButtonText}>全部</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
-
-      <TouchableOpacity style={styles.speedButton} onPress={handleSpeedChange}>
-        <Text style={styles.speedText}>{playbackSpeed}x</Text>
-      </TouchableOpacity>
-    </View>
+    </Modal>
   );
 
   const renderTabBar = () => (
@@ -181,7 +521,6 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({ recording }) => {
                   multiline
                   value={segment.text}
                   onChangeText={(text) => {
-                    // 更新文本逻辑
                   }}
                 />
               ) : (
@@ -341,6 +680,8 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({ recording }) => {
       {renderAudioPlayer()}
       {renderTabBar()}
       {renderContent()}
+      {renderSpeedModal()}
+      {renderTrimModal()}
     </SafeAreaView>
   );
 };
@@ -386,12 +727,21 @@ const styles = StyleSheet.create({
   audioPlayer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.md,
     backgroundColor: theme.colors.backgroundSecondary,
     marginHorizontal: theme.spacing.lg,
     borderRadius: theme.borderRadius.lg,
     marginBottom: theme.spacing.md,
+  },
+  skipButton: {
+    alignItems: 'center',
+    paddingHorizontal: theme.spacing.xs,
+  },
+  skipText: {
+    fontSize: 10,
+    color: theme.colors.textSecondary,
+    marginTop: 2,
   },
   playButton: {
     width: 48,
@@ -400,33 +750,44 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
+    marginHorizontal: theme.spacing.xs,
   },
   progressContainer: {
     flex: 1,
-    marginHorizontal: theme.spacing.md,
+    marginHorizontal: theme.spacing.sm,
   },
   progressBar: {
-    height: 4,
+    height: 6,
     backgroundColor: theme.colors.backgroundTertiary,
-    borderRadius: 2,
-    overflow: 'hidden',
+    borderRadius: 3,
+    overflow: 'visible',
+    position: 'relative',
   },
   progressFill: {
     height: '100%',
     backgroundColor: theme.colors.primary,
-    borderRadius: 2,
+    borderRadius: 3,
+  },
+  progressThumb: {
+    position: 'absolute',
+    top: -3,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: theme.colors.primary,
+    marginLeft: -6,
   },
   timeContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 8,
+    marginTop: 6,
   },
   timeText: {
     fontSize: theme.typography.sizes.xs,
     color: theme.colors.textSecondary,
   },
   speedButton: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 6,
     backgroundColor: theme.colors.backgroundTertiary,
     borderRadius: theme.borderRadius.sm,
@@ -668,12 +1029,12 @@ const styles = StyleSheet.create({
   todoMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
   },
   todoPriority: {
-    paddingHorizontal: 6,
+    paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 4,
+    borderRadius: theme.borderRadius.sm,
   },
   todoPriorityText: {
     fontSize: theme.typography.sizes.xs,
@@ -683,6 +1044,159 @@ const styles = StyleSheet.create({
   todoDueDate: {
     fontSize: theme.typography.sizes.xs,
     color: theme.colors.textSecondary,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'flex-end',
+  },
+  speedModalContent: {
+    backgroundColor: theme.colors.backgroundSecondary,
+    borderTopLeftRadius: theme.borderRadius.xl,
+    borderTopRightRadius: theme.borderRadius.xl,
+    padding: theme.spacing.lg,
+    paddingBottom: theme.spacing.xxl,
+  },
+  modalTitle: {
+    fontSize: theme.typography.sizes.lg,
+    fontWeight: theme.typography.weights.semibold,
+    color: theme.colors.textPrimary,
+    textAlign: 'center',
+    marginBottom: theme.spacing.lg,
+  },
+  speedOptions: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  speedOption: {
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+    borderRadius: theme.borderRadius.lg,
+    backgroundColor: theme.colors.backgroundTertiary,
+  },
+  speedOptionActive: {
+    backgroundColor: theme.colors.primary,
+  },
+  speedOptionText: {
+    fontSize: theme.typography.sizes.base,
+    color: theme.colors.textPrimary,
+    fontWeight: theme.typography.weights.semibold,
+  },
+  speedOptionTextActive: {
+    color: '#fff',
+  },
+  trimModalContent: {
+    backgroundColor: theme.colors.backgroundSecondary,
+    borderTopLeftRadius: theme.borderRadius.xl,
+    borderTopRightRadius: theme.borderRadius.xl,
+    padding: theme.spacing.lg,
+    paddingBottom: theme.spacing.xxl,
+    maxHeight: '80%',
+  },
+  trimModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: theme.spacing.lg,
+  },
+  trimModalCancel: {
+    fontSize: theme.typography.sizes.base,
+    color: theme.colors.textSecondary,
+  },
+  trimModalConfirm: {
+    fontSize: theme.typography.sizes.base,
+    color: theme.colors.primary,
+    fontWeight: theme.typography.weights.semibold,
+  },
+  trimModalConfirmDisabled: {
+    color: theme.colors.textTertiary,
+  },
+  trimPreview: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: theme.spacing.lg,
+    marginBottom: theme.spacing.md,
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.backgroundTertiary,
+    borderRadius: theme.borderRadius.lg,
+  },
+  trimTimeBlock: {
+    alignItems: 'center',
+  },
+  trimTimeLabel: {
+    fontSize: theme.typography.sizes.xs,
+    color: theme.colors.textSecondary,
+    marginBottom: 4,
+  },
+  trimTimeValue: {
+    fontSize: theme.typography.sizes.xl,
+    fontWeight: theme.typography.weights.bold,
+    color: theme.colors.textPrimary,
+  },
+  trimDurationInfo: {
+    alignItems: 'center',
+    marginBottom: theme.spacing.lg,
+  },
+  trimDurationText: {
+    fontSize: theme.typography.sizes.sm,
+    color: theme.colors.primary,
+    fontWeight: theme.typography.weights.medium,
+  },
+  trimControls: {
+    marginBottom: theme.spacing.lg,
+  },
+  trimLabel: {
+    fontSize: theme.typography.sizes.sm,
+    color: theme.colors.textSecondary,
+    marginBottom: theme.spacing.sm,
+  },
+  sliderContainer: {
+    marginBottom: theme.spacing.md,
+  },
+  sliderTrack: {
+    height: 4,
+    backgroundColor: theme.colors.backgroundTertiary,
+    borderRadius: 2,
+    marginBottom: theme.spacing.sm,
+  },
+  sliderFill: {
+    height: '100%',
+    backgroundColor: theme.colors.primary,
+    borderRadius: 2,
+  },
+  sliderButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  sliderButton: {
+    width: 36,
+    height: 36,
+    borderRadius: theme.borderRadius.full,
+    backgroundColor: theme.colors.backgroundTertiary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sliderValue: {
+    fontSize: theme.typography.sizes.base,
+    color: theme.colors.textPrimary,
+    fontWeight: theme.typography.weights.medium,
+  },
+  trimQuickActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: theme.spacing.md,
+  },
+  trimQuickButton: {
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.lg,
+    backgroundColor: theme.colors.backgroundTertiary,
+    borderRadius: theme.borderRadius.md,
+  },
+  trimQuickButtonText: {
+    fontSize: theme.typography.sizes.sm,
+    color: theme.colors.textPrimary,
   },
 });
 
