@@ -1,4 +1,4 @@
-import { Summary, Todo, Recording, Transcription } from '@types/index';
+import { Summary, Todo, Recording, Transcription } from '../types/index';
 import uuid from 'react-native-uuid';
 import { aiAdapter } from './ai-adapter';
 
@@ -184,7 +184,7 @@ export class AIService {
   }
 
   // 检查是否正在处理
-  isProcessing(): boolean {
+  getIsProcessing(): boolean {
     return this.isProcessing;
   }
 }

@@ -11,9 +11,10 @@ import RecordingScreen from '@screens/RecordingScreen';
 import EditorScreen from '@screens/EditorScreen';
 import FilesScreen from '@screens/FilesScreen';
 import SettingsScreen from '@screens/SettingsScreen';
+import PlayerScreen from '@screens/PlayerScreen';
 
 // Types
-import { RootStackParamList, MainTabParamList } from '@types/index';
+import { RootStackParamList, MainTabParamList } from '../types/index';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -63,26 +64,14 @@ const MainTabNavigator: React.FC = () => {
         },
       })}
     >
-      <Tab.Screen 
-        name="Home" 
-        component={HomeScreen}
-        options={{ tabBarLabel: '首页' }}
-      />
-      <Tab.Screen 
-        name="Files" 
-        component={FilesScreen}
-        options={{ tabBarLabel: '文件' }}
-      />
-      <Tab.Screen 
-        name="Statistics" 
+      <Tab.Screen name='Home' component={HomeScreen} options={{ tabBarLabel: '首页' }} />
+      <Tab.Screen name='Files' component={FilesScreen} options={{ tabBarLabel: '文件' }} />
+      <Tab.Screen
+        name='Statistics'
         component={HomeScreen} // Placeholder
         options={{ tabBarLabel: '统计' }}
       />
-      <Tab.Screen 
-        name="Profile" 
-        component={SettingsScreen}
-        options={{ tabBarLabel: '我的' }}
-      />
+      <Tab.Screen name='Profile' component={SettingsScreen} options={{ tabBarLabel: '我的' }} />
     </Tab.Navigator>
   );
 };
@@ -98,25 +87,16 @@ export const AppNavigator: React.FC = () => {
           animation: 'slide_from_right',
         }}
       >
-        <Stack.Screen 
-          name="Main" 
-          component={MainTabNavigator}
-        />
-        <Stack.Screen 
-          name="Recording" 
+        <Stack.Screen name='Main' component={MainTabNavigator} />
+        <Stack.Screen
+          name='Recording'
           component={RecordingScreen}
           options={{
             animation: 'fade',
           }}
         />
-        <Stack.Screen 
-          name="Editor" 
-          component={EditorScreen}
-        />
-        <Stack.Screen 
-          name="Settings" 
-          component={SettingsScreen}
-        />
+        <Stack.Screen name='Editor' component={PlayerScreen} />
+        <Stack.Screen name='Settings' component={SettingsScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

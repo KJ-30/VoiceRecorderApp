@@ -2,7 +2,7 @@
 // 需要先安装 Ollama: https://ollama.com
 // 然后运行: ollama pull llama3.2
 
-import { Summary, Todo, Transcription } from '@types/index';
+import { Summary, Todo, Transcription } from '../types/index';
 import uuid from 'react-native-uuid';
 
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';

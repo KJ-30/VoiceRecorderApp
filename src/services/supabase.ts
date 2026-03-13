@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { Recording, Folder, User, Transcription, Summary, Todo } from '@types/index';
+import { Recording, Folder, User, Transcription, Summary, Todo } from '../types/index';
 
 // Supabase 客户端配置
 const supabaseUrl = process.env.SUPABASE_URL || 'https://bafeujvezjurbobculbp.supabase.co';

@@ -1,4 +1,4 @@
-import { Transcription, TranscriptionSegment, Recording } from '@types/index';
+import { Transcription, TranscriptionSegment, Recording } from '../types/index';
 import uuid from 'react-native-uuid';
 
 // 模拟转写服务

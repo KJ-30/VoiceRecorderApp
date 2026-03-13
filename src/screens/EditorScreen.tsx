@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { theme, utils } from '@utils/theme';
-import { Recording, Transcription, Summary, Todo } from '@types/index';
+import { Recording, Transcription, Summary, Todo } from '../types/index';
 
 interface EditorScreenProps {
   recording: Recording;
