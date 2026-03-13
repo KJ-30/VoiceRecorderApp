@@ -122,7 +122,7 @@ export interface AppState {
 export type RootStackParamList = {
   Main: undefined;
   Recording: { recordingId?: string };
-  Editor: { recordingId: string };
+  Editor: { recordingId: string; mode?: 'trim' };
   Export: { recordingId: string };
   Share: { recordingId: string };
   Settings: undefined;

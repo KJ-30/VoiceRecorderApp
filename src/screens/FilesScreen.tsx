@@ -8,14 +8,21 @@ import {
   StatusBar,
   ScrollView,
   TextInput,
+  Alert,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAppStore } from '@store/index';
 import { theme, utils } from '@utils/theme';
-import { Recording, Folder } from '@types/index';
+import { Recording, Folder, RootStackParamList } from '@types/index';
+import { audioEditorService } from '@services/audio-editor';
+
+type FilesScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Main'>;
 
 export const FilesScreen: React.FC = () => {
-  const { recordings, folders } = useAppStore();
+  const navigation = useNavigation<FilesScreenNavigationProp>();
+  const { recordings, folders, addRecording } = useAppStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -254,11 +261,74 @@ export const FilesScreen: React.FC = () => {
     </View>
   );
 
+  const handleTrim = () => {
+    if (selectedItems.length !== 1) {
+      Alert.alert('提示', '请选择一个文件进行裁剪');
+      return;
+    }
+    const recording = recordings.find(r => r.id === selectedItems[0]);
+    if (recording) {
+      navigation.navigate('Editor', { recordingId: recording.id, mode: 'trim' });
+    }
+  };
+
+  const handleMerge = async () => {
+    if (selectedItems.length < 2) {
+      Alert.alert('提示', '请选择至少2个文件进行合并');
+      return;
+    }
+    if (selectedItems.length > 5) {
+      Alert.alert('提示', '最多只能合并5个文件');
+      return;
+    }
+
+    const selectedRecordings = recordings.filter(r => selectedItems.includes(r.id));
+    
+    Alert.alert(
+      '确认合并',
+      `将合并 ${selectedRecordings.length} 个文件，是否继续？`,
+      [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '确定',
+          onPress: async () => {
+            const result = await audioEditorService.merge({
+              recordings: selectedRecordings,
+            });
+            if (result.success && result.recording) {
+              addRecording(result.recording);
+              setIsSelectionMode(false);
+              setSelectedItems([]);
+              Alert.alert('成功', '文件合并完成');
+            } else {
+              Alert.alert('失败', result.error || '合并失败');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const renderSelectionToolbar = () => {
     if (!isSelectionMode) return null;
 
+    const showMerge = selectedItems.length >= 2 && selectedItems.length <= 5;
+    const showTrim = selectedItems.length === 1;
+
     return (
       <View style={styles.selectionToolbar}>
+        {showTrim && (
+          <TouchableOpacity style={styles.selectionToolbarButton} onPress={handleTrim}>
+            <Icon name="cut" size={20} color={theme.colors.textPrimary} />
+            <Text style={styles.selectionToolbarText}>裁剪</Text>
+          </TouchableOpacity>
+        )}
+        {showMerge && (
+          <TouchableOpacity style={styles.selectionToolbarButton} onPress={handleMerge}>
+            <Icon name="git-merge" size={20} color={theme.colors.textPrimary} />
+            <Text style={styles.selectionToolbarText}>合并</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity style={styles.selectionToolbarButton}>
           <Icon name="folder-open" size={20} color={theme.colors.textPrimary} />
           <Text style={styles.selectionToolbarText}>移动</Text>
